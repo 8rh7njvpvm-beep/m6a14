@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>魔法比例尺：學院保衛戰 (含訂正功能)</title>
+    <style>
+        :root {
+            --primary-color: #6c5ce7;
+            --secondary-color: #00cec9;
+            --danger-color: #ff7675;
+            --text-color: #ffffff;
+            --modal-bg: rgba(20, 20, 35, 0.95);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: "Segoe UI", "Microsoft JhengHei", sans-serif; user-select: none; }
+        
+        body {
+            overflow: hidden;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            color: var(--text-color);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* Canvas Layer */
+        #gameCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* UI Layer */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none; 
+        }
+
+        /* HUD */
+        .hud {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            padding: 0 20px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 1.2rem;
+            font-weight: bold;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .progress-container {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            height: 10px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: var(--secondary-color);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        /* Screens (Start/End) */
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            pointer-events: auto;
+            text-align: center;
+            backdrop-filter: blur(5px);
+            padding: 20px;
+        }
+
+        .hidden { display: none !important; }
+
+        h1 { font-size: 2.5rem; margin-bottom: 20px; color: var(--secondary-color); text-transform: uppercase; letter-spacing: 2px; }
+        p { font-size: 1.2rem; margin-bottom: 30px; line-height: 1.6; max-width: 600px; }
+        
+        .btn {
+            padding: 15px 40px;
+            font-size: 1.5rem;
+            background: linear-gradient(45deg, var(--primary-color), #a29bfe);
+            border: none;
+            border-radius: 50px;
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(108, 92, 231, 0.4);
+            transition: transform 0.2s, box-shadow 0.2s;
+            text-decoration: none;
+            margin-top: 20px;
+        }
+
+        .btn:hover { transform: scale(1.05); box-shadow: 0 6px 20px rgba(108, 92, 231, 0.6); }
+        .btn:active { transform: scale(0.95); }
+
+        /* Quiz Modal */
+        #quiz-modal {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 600px;
+            background: var(--modal-bg);
+            border: 2px solid var(--primary-color);
+            border-radius: 15px;
+            padding: 20px;
+            z-index: 5;
+            pointer-events: auto;
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.5);
+            display: none;
+        }
+
+        .question-text {
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            color: #dfe6e9;
+        }
+
+        .options-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .option-btn {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 12px;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 1rem;
+        }
+
+        .option-btn:hover { background: rgba(255,255,255,0.2); }
+        .option-btn.correct { background: #00b894; border-color: #00b894; }
+        .option-btn.wrong { background: #d63031; border-color: #d63031; }
+
+        /* Review Section (New) */
+        #review-container {
+            width: 100%;
+            max-width: 600px;
+            max-height: 50vh;
+            overflow-y: auto;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 10px;
+            margin-bottom: 20px;
+            text-align: left;
+            display: none; /* Hidden by default */
+        }
+
+        .review-item {
+            background: rgba(0, 0, 0, 0.3);
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            border-left: 4px solid var(--danger-color);
+        }
+
+        .review-q { font-weight: bold; margin-bottom: 5px; color: #fab1a0; font-size: 0.95rem; }
+        .review-a { color: #55efc4; margin-bottom: 5px; font-size: 0.9rem; }
+        .review-note { color: #aaa; font-style: italic; font-size: 0.85rem; }
+
+        /* Shake Animation */
+        .shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+
+        #level-indicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3rem;
+            font-weight: bold;
+            color: #ffeaa7;
+            text-shadow: 0 0 20px var(--primary-color);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s;
+            z-index: 8;
+        }
+
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="ui-layer">
+        <div class="hud">
+            <div>Score: <span id="score">0</span></div>
+            <div>Level: <span id="level">1</span></div>
+        </div>
+        <div class="progress-container">
+            <div class="progress-bar" id="progress-bar"></div>
+        </div>
+        <div id="level-indicator">LEVEL 2</div>
+    </div>
+
+    <div id="quiz-modal">
+        <div class="question-text" id="question-text">題目載入中...</div>
+        <div class="options-grid" id="options-grid">
+            </div>
+    </div>
+
+    <div id="start-screen" class="screen">
+        <h1>🧙‍♂️ 魔法比例尺</h1>
+        <p>歡迎來到魔法學院！<br>數學怪物正在入侵，答對題目施放魔法！</p>
+        <button class="btn" onclick="game.start()">開始保衛戰</button>
+    </div>
+
+    <div id="game-over-screen" class="screen hidden">
+        <h1 id="end-title">Game Over</h1>
+        <p id="end-msg">你的分數...</p>
+        
+        <div id="review-container">
+            <h3 style="color:white; margin-bottom:10px; text-align:center;">📝 錯題訂正</h3>
+            <div id="review-list"></div>
+        </div>
+
+        <button class="btn" onclick="location.reload()">再玩一次</button>
+    </div>
+
+<script>
+/**
+ * 題庫數據 (基於上傳的 PDF 知識點)
+ */
+const QUESTION_BANK = [
+    {
+        id: 1,
+        question: "地圖比例尺是 1 : 3 000 000，圖上距離是 5.1 cm。實際距離是多少？",
+        options: ["153 m", "15.3 km", "153 km", "1530 km"],
+        correct: 2, 
+        note: "訂正：實際距離 = 圖上距離 ÷ 比例尺。5.1 × 3,000,000 = 15,300,000 cm = 153 km"
+    },
+    {
+        id: 2,
+        question: "足球場實際長度 120 米，用 1 : 1000 的比例尺畫在紙上，圖上長度是多少？",
+        options: ["12 cm", "1.2 cm", "120 cm", "0.12 cm"],
+        correct: 0, 
+        note: "訂正：120 m = 12,000 cm。圖上距離 = 12,000 ÷ 1,000 = 12 cm"
+    },
+    {
+        id: 3,
+        question: "地圖比例尺 1 : 50 000，量得單車徑長 4 cm。實際長度是多少？",
+        options: ["200 m", "2 km", "20 km", "0.2 km"],
+        correct: 1, 
+        note: "訂正：實際距離 = 4 × 50,000 = 200,000 cm。200,000 cm = 2,000 m = 2 km"
+    },
+    {
+        id: 4,
+        question: "河流實際長 12 km，地圖比例尺 1 : 100 000。圖上長度是多少？",
+        options: ["1.2 cm", "12 cm", "120 cm", "0.12 m"],
+        correct: 1, 
+        note: "訂正：12 km = 1,200,000 cm。圖上距離 = 1,200,000 ÷ 100,000 = 12 cm"
+    },
+    {
+        id: 5,
+        question: "圖上距離 1.2 cm，代表實際距離 3 km。這張地圖的比例尺是多少？",
+        options: ["1 : 25 000", "1 : 250 000", "1 : 300 000", "1 : 2 500"],
+        correct: 1, 
+        note: "訂正：統一單位。3 km = 300,000 cm。比例 = 1.2 : 300,000 = 12 : 3,000,000 = 1 : 250,000"
+    },
+    {
+        id: 6,
+        question: "實際距離 0.21 m，比例尺 1 : 6。圖上距離是多少？",
+        options: ["3.5 cm", "1.26 cm", "35 cm", "0.035 m"],
+        correct: 0, 
+        note: "訂正：0.21 m = 21 cm。放大比例尺？不，這是縮小。圖上 = 21 ÷ 6 = 3.5 cm"
+    },
+    {
+        id: 7,
+        question: "機械零件圖比例尺 10 : 1，圖上長度 5 cm。零件實際長度是多少？",
+        options: ["50 cm", "0.5 cm", "5 mm", "50 mm"],
+        correct: 1, 
+        note: "訂正：這是放大圖 (10:1)。實際長度 = 圖上長度 ÷ 10 = 5 ÷ 10 = 0.5 cm"
+    },
+    {
+        id: 8,
+        question: "長方體水池長 60 米，在 1 : 100 的圖紙上，長度應畫成多少？",
+        options: ["6 cm", "60 cm", "0.6 cm", "6 m"],
+        correct: 1, 
+        note: "訂正：60 m = 6,000 cm。圖上距離 = 6,000 ÷ 100 = 60 cm"
+    }
+];
+
+class Game {
+    constructor() {
+        this.canvas = document.getElementById('gameCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.width = window.innerWidth;
+        this.height = window.innerHeight;
+        this.canvas.width = this.width;
+        this.canvas.height = this.height;
+
+        this.state = 'START'; 
+        this.level = 1;
+        this.score = 0;
+        this.questionsCorrect = 0;
+        this.totalRequired = 8; 
+        
+        this.particles = [];
+        this.enemies = [];
+        this.projectiles = [];
+        
+        this.lastTime = 0;
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+        this.loop = this.loop.bind(this);
+        this.resize = this.resize.bind(this);
+        window.addEventListener('resize', this.resize);
+        
+        this.quizManager = new QuizManager(this);
+    }
+
+    resize() {
+        this.width = window.innerWidth;
+        this.height = window.innerHeight;
+        this.canvas.width = this.width;
+        this.canvas.height = this.height;
+    }
+
+    start() {
+        document.getElementById('start-screen').classList.add('hidden');
+        this.state = 'PLAYING';
+        this.score = 0;
+        this.level = 1;
+        this.questionsCorrect = 0;
+        this.quizManager.reset();
+        
+        this.player = { x: 50, y: this.height - 100, emoji: "🏰" };
+        
+        requestAnimationFrame(this.loop);
+        this.quizManager.nextQuestion();
+    }
+
+    loop(timestamp) {
+        if (this.state !== 'PLAYING') return;
+        const deltaTime = timestamp - this.lastTime;
+        this.lastTime = timestamp;
+
+        this.ctx.clearRect(0, 0, this.width, this.height);
+        this.drawBackground();
+
+        // Draw Player
+        this.ctx.font = "80px Arial";
+        this.ctx.fillText(this.player.emoji, 20, this.height - 100);
+        
+        // Projectiles
+        this.projectiles.forEach((p, index) => {
+            p.x += p.speed;
+            this.ctx.beginPath();
+            this.ctx.arc(p.x, p.y, 10, 0, Math.PI*2);
+            this.ctx.fillStyle = "#fdcb6e";
+            this.ctx.shadowBlur = 10;
+            this.ctx.shadowColor = "gold";
+            this.ctx.fill();
+            this.ctx.shadowBlur = 0;
+
+            if (this.enemies.length > 0) {
+                let target = this.enemies[0];
+                if (Math.abs(p.x - target.x) < 50) {
+                    this.createExplosion(target.x, target.y);
+                    this.enemies.shift();
+                    this.projectiles.splice(index, 1);
+                    this.quizManager.onEnemyDefeated();
+                }
+            } else if (p.x > this.width) {
+                 this.projectiles.splice(index, 1);
+            }
+        });
+
+        // Spawn Enemy logic handled by Quiz timing mostly, but visuals here
+        if (this.enemies.length === 0 && !this.quizManager.isFinished) {
+            this.spawnEnemy();
+        }
+
+        this.enemies.forEach((e) => {
+            if (e.x > 150) e.x -= e.speed;
+            this.ctx.font = "60px Arial";
+            this.ctx.fillText(e.emoji, e.x, e.y);
+            this.ctx.fillStyle = "red";
+            this.ctx.fillRect(e.x, e.y - 60, 50, 5);
+        });
+
+        this.updateParticles();
+        requestAnimationFrame(this.loop);
+    }
+
+    drawBackground() {
+        if (Math.random() > 0.95) {
+             this.ctx.fillStyle = "white";
+             this.ctx.fillRect(Math.random() * this.width, Math.random() * this.height, 2, 2);
+        }
+    }
+
+    spawnEnemy() {
+        const emojis = this.level === 1 ? ["👾", "🐌", "🤖"] : ["🐉", "👹", "🦇"];
+        const speed = this.level === 1 ? 0.5 : 1.5;
+        this.enemies.push({
+            x: this.width + 50,
+            y: this.height - 120,
+            emoji: emojis[Math.floor(Math.random() * emojis.length)],
+            speed: speed
+        });
+    }
+
+    shoot() {
+        this.projectiles.push({ x: 100, y: this.height - 150, speed: 15 });
+        this.playSound('shoot');
+    }
+
+    createExplosion(x, y) {
+        for (let i = 0; i < 20; i++) {
+            this.particles.push({
+                x: x, y: y,
+                vx: (Math.random() - 0.5) * 10, vy: (Math.random() - 0.5) * 10,
+                life: 1.0, color: `hsl(${Math.random()*60 + 20}, 100%, 50%)`
+            });
+        }
+        this.playSound('explosion');
+    }
+
+    updateParticles() {
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            let p = this.particles[i];
+            p.x += p.vx; p.y += p.vy; p.life -= 0.05;
+            this.ctx.globalAlpha = p.life;
+            this.ctx.fillStyle = p.color;
+            this.ctx.beginPath();
+            this.ctx.arc(p.x, p.y, 5, 0, Math.PI*2);
+            this.ctx.fill();
+            this.ctx.globalAlpha = 1.0;
+            if (p.life <= 0) this.particles.splice(i, 1);
+        }
+    }
+
+    playSound(type) {
+        if (!this.audioContext) return;
+        const osc = this.audioContext.createOscillator();
+        const gain = this.audioContext.createGain();
+        osc.connect(gain);
+        gain.connect(this.audioContext.destination);
+
+        if (type === 'shoot') {
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(400, this.audioContext.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(100, this.audioContext.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.1, this.audioContext.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.1);
+            osc.start(); osc.stop(this.audioContext.currentTime + 0.1);
+        } else if (type === 'explosion') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(100, this.audioContext.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.3);
+            gain.gain.setValueAtTime(0.2, this.audioContext.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.3);
+            osc.start(); osc.stop(this.audioContext.currentTime + 0.3);
+        } else if (type === 'wrong') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(150, this.audioContext.currentTime);
+            osc.frequency.linearRampToValueAtTime(100, this.audioContext.currentTime + 0.2);
+            gain.gain.setValueAtTime(0.2, this.audioContext.currentTime);
+            osc.start(); osc.stop(this.audioContext.currentTime + 0.2);
+        }
+    }
+
+    levelUp() {
+        this.level = 2;
+        const indicator = document.getElementById('level-indicator');
+        indicator.style.opacity = 1;
+        document.body.style.background = "linear-gradient(135deg, #4b134f, #190a05)";
+        setTimeout(() => indicator.style.opacity = 0, 2000);
+    }
+
+    gameOver(won) {
+        this.state = 'GAMEOVER';
+        const screen = document.getElementById('game-over-screen');
+        const title = document.getElementById('end-title');
+        const msg = document.getElementById('end-msg');
+        const reviewContainer = document.getElementById('review-container');
+        const reviewList = document.getElementById('review-list');
+        
+        screen.classList.remove('hidden');
+        
+        // Generate Review List
+        reviewList.innerHTML = '';
+        const mistakes = this.quizManager.getMistakes();
+        
+        if (mistakes.length > 0) {
+            reviewContainer.style.display = 'block';
+            mistakes.forEach(q => {
+                const item = document.createElement('div');
+                item.className = 'review-item';
+                item.innerHTML = `
+                    <div class="review-q">Q: ${q.question}</div>
+                    <div class="review-a">✔ 正解: ${q.options[q.correct]}</div>
+                    <div class="review-note">${q.note}</div>
+                `;
+                reviewList.appendChild(item);
+            });
+        } else {
+            reviewContainer.style.display = 'block';
+            reviewList.innerHTML = '<div style="color:#55efc4; text-align:center;">🎉 完美！全部答對，沒有錯題。</div>';
+        }
+
+        if (won) {
+            title.innerText = "VICTORY!";
+            title.style.color = "#55efc4";
+            msg.innerText = `太棒了！你保衛了魔法學院。\n最終得分: ${this.score}`;
+            this.createExplosion(this.width/2, this.height/2);
+        } else {
+            title.innerText = "GAME OVER";
+            title.style.color = "#ff7675";
+            msg.innerText = "學院被攻破了...查看下方的訂正再試一次吧！";
+        }
+    }
+}
+
+class QuizManager {
+    constructor(game) {
+        this.game = game;
+        this.reset();
+        this.modal = document.getElementById('quiz-modal');
+        this.qText = document.getElementById('question-text');
+        this.optsGrid = document.getElementById('options-grid');
+    }
+
+    reset() {
+        this.shuffledQuestions = this.shuffle([...QUESTION_BANK]);
+        this.activeQuestion = null;
+        this.isFinished = false;
+        this.mistakes = []; // Array to store wrong questions
+    }
+
+    shuffle(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }
+
+    nextQuestion() {
+        if (this.game.questionsCorrect >= 8) {
+            this.game.gameOver(true);
+            this.isFinished = true;
+            this.modal.style.display = 'none';
+            return;
+        }
+
+        if (this.game.level === 1 && this.game.questionsCorrect === 3) {
+            this.game.levelUp();
+        }
+
+        this.activeQuestion = this.shuffledQuestions[this.game.questionsCorrect % this.shuffledQuestions.length];
+        this.renderQuestion();
+    }
+
+    renderQuestion() {
+        this.modal.style.display = 'block';
+        this.qText.innerText = `Q${this.game.questionsCorrect + 1}: ${this.activeQuestion.question}`;
+        this.optsGrid.innerHTML = '';
+
+        this.activeQuestion.options.forEach((opt, idx) => {
+            const btn = document.createElement('button');
+            btn.className = 'option-btn';
+            btn.innerText = opt;
+            btn.onclick = () => this.handleAnswer(idx, btn);
+            this.optsGrid.appendChild(btn);
+        });
+    }
+
+    handleAnswer(selectedIndex, btnElement) {
+        if (selectedIndex === this.activeQuestion.correct) {
+            btnElement.classList.add('correct');
+            this.game.score += 100 * this.game.level;
+            document.getElementById('score').innerText = this.game.score;
+            this.game.shoot();
+            setTimeout(() => { this.modal.style.display = 'none'; }, 500);
+        } else {
+            btnElement.classList.add('wrong');
+            document.body.classList.add('shake');
+            this.game.playSound('wrong');
+            
+            // Record Mistake (avoid duplicates)
+            if (!this.mistakes.includes(this.activeQuestion)) {
+                this.mistakes.push(this.activeQuestion);
+            }
+
+            setTimeout(() => { document.body.classList.remove('shake'); }, 500);
+            this.game.score = Math.max(0, this.game.score - 50);
+            document.getElementById('score').innerText = this.game.score;
+        }
+    }
+
+    onEnemyDefeated() {
+        this.game.questionsCorrect++;
+        this.updateProgress();
+        setTimeout(() => { this.nextQuestion(); }, 1000);
+    }
+
+    updateProgress() {
+        const pct = (this.game.questionsCorrect / this.game.totalRequired) * 100;
+        document.getElementById('progress-bar').style.width = `${pct}%`;
+        document.getElementById('level').innerText = this.game.level;
+    }
+
+    getMistakes() {
+        return this.mistakes;
+    }
+}
+
+const game = new Game();
+
+</script>
+</body>
+</html>
